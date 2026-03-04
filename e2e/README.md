@@ -12,10 +12,9 @@ acceptance criteria for pull requests.
 
 - `./hack/binaries.sh`          Fetch binaries into `./hack/bin`
 - `./hack/registry.sh`          (once) Configure insecure local registry
-- `./hack/cluster.sh`           Create a cluster and kube config in `./hack/bin`
-- `make test-full`               Run all tests using these binaries and cluster
+- `./hack/cluster.sh`           Create a cluster and kubeconfig in `./hack/bin`
+- `make test-full`              Run all tests using these binaries and cluster
 - `./hack/delete.sh`            Remove the cluster
-
 
 ## Overview
 
@@ -205,6 +204,7 @@ running tests directly (eg `go test -tags e2e ./e2e`).
 Tests follow a naming convention to allow for manually testing subsets.  For
 example, To run only "core" tests, run `make` to update the binary to test,
 then `go test -tags e2e -run TestCore ./e2e`. Subsets include:
+
 - TestCore
 - TestMetadata
 - TestRemote
@@ -224,4 +224,3 @@ Replace script executions with "make test-full" (backwards compatibility for
 environment variables is implemented).
 
 The binary is compiled automatically via the make target.
-

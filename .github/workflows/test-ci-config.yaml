@@ -1,0 +1,23 @@
+name: Test CI Config (act)
+on:
+  workflow_dispatch:
+jobs:
+  test-ci-config:
+    name: E2E - CI Config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: knative/actions/setup-go@main
+      - name: Install act
+        run: curl -sfL https://raw.githubusercontent.com/nektos/act/master/install.sh | sudo bash -s -- -b /usr/local/bin
+      - name: Build func binary
+        run: make build
+      - name: Test generated CI workflow
+        run: |
+          TMPDIR=$(mktemp -d)
+          ./func create --language go --template http "$TMPDIR"
+          cd "$TMPDIR"
+          git init && git add . && git commit -m "init"
+          FUNC_ENABLE_CI_CONFIG=true $GITHUB_WORKSPACE/func config ci --registry-login=false
+          act push -P ubuntu-latest=-self-hosted \
+            -W .github/workflows/func-deploy.yaml
