@@ -1,6 +1,9 @@
 name: Test CI Config (act)
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - issue-783-e2e-tests-with-act
 jobs:
   test-ci-config:
     name: E2E - CI Config
