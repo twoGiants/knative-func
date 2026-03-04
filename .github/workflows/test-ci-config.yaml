@@ -12,7 +12,7 @@ jobs:
       - name: Install func cli
         uses: functions-dev/action@main
         with:
-          version: knative-v1.21.0
+          version: nightly
           name: func
       - name: Install act
         run: curl -sfL https://raw.githubusercontent.com/nektos/act/master/install.sh | sudo bash -s -- -b /usr/local/bin
