@@ -8,7 +8,26 @@ jobs:
   test-ci-config:
     name: E2E - CI Config
     runs-on: ubuntu-latest
+    env:
+      FUNC_CLUSTER_RETRIES: 5
     steps:
+      - uses: actions/checkout@v4
+      - uses: knative/actions/setup-go@main
+      - uses: endersonmenezes/free-disk-space@v3
+        with:
+          remove_android: true
+          remove_dotnet: true
+          remove_haskell: true
+          remove_swap: true
+          rm_cmd: "rmz"
+      - name: Install Binaries
+        run: ./hack/binaries.sh
+      - name: Allocate Cluster
+        run: ./hack/cluster.sh
+      - name: Start Local Registry
+        run: ./hack/registry.sh
+      - name: Prepare Images
+        run: ./hack/images.sh
       - name: Install func cli
         uses: functions-dev/action@main
         with:
@@ -28,4 +47,6 @@ jobs:
           git add . && git commit -m "init"
           FUNC_ENABLE_CI_CONFIG=true func config ci --registry-login=false
           act push -P ubuntu-latest=-self-hosted \
-            -W .github/workflows/func-deploy.yaml
+            -W .github/workflows/func-deploy.yaml \
+            -s KUBECONFIG="$(cat $GITHUB_WORKSPACE/hack/bin/kubeconfig.yaml)" \
+            --var REGISTRY_URL=localhost:50000/func
