@@ -22,7 +22,10 @@ jobs:
           mkdir -p "$FUNCDIR"
           func create --language go --template http "$FUNCDIR"
           cd "$FUNCDIR"
-          git init && git add . && git commit -m "init"
+          git init -b main
+          git config user.email "test@test.com"
+          git config user.name "test"
+          git add . && git commit -m "init"
           FUNC_ENABLE_CI_CONFIG=true func config ci --registry-login=false
           act push -P ubuntu-latest=-self-hosted \
             -W .github/workflows/func-deploy.yaml
