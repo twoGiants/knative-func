@@ -11,8 +11,7 @@ import (
 )
 
 func TestConfigCI_DeployFuncViaGeneratedGitHubWorkflow(t *testing.T) {
-	// TODO(twoGiants): once this test passes uncomment other runtimes
-	for _, runtime := range []string{"go" /* "node", "typescript", "python", "quarkus" */} {
+	for _, runtime := range []string{"go", "node", "typescript", "python", "quarkus"} {
 		name := fmt.Sprintf("func-e2e-ci-config-%s", runtime)
 		t.Run(name, func(t *testing.T) {
 			root := fromCleanEnv(t, name)
@@ -38,7 +37,7 @@ func TestConfigCI_DeployFuncViaGeneratedGitHubWorkflow(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			execGitHubWorkflow(t, root)
+			runGitHubWorkflow(t, root)
 
 			if !waitFor(t, ksvcUrl(name)) {
 				t.Fatal("deployed function not reachable")
@@ -68,8 +67,8 @@ func gitInit(t *testing.T, dir string) {
 	}
 }
 
-// execGitHubWorkflow runs the func-deploy GitHub Actions workflow locally using act.
-func execGitHubWorkflow(t *testing.T, dir string) {
+// runGitHubWorkflow runs the func-deploy GitHub Actions workflow locally using act.
+func runGitHubWorkflow(t *testing.T, dir string) {
 	t.Helper()
 
 	cmd := exec.Command("act", "push",
