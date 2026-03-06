@@ -1,0 +1,35 @@
+name: Test Config CI (act)
+on:
+  push:
+    branches:
+      - issue-783-e2e-tests-with-act
+jobs:
+  test-config-ci:
+    name: E2E - Config CI GitHub Workflows
+    runs-on: ubuntu-latest
+    env:
+      FUNC_CLUSTER_RETRIES: 5
+      FUNC_E2E_CLEAN: false
+      FUNC_E2E_VERBOSE: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: knative/actions/setup-go@main
+      - uses: endersonmenezes/free-disk-space@v3
+        with:
+          remove_android: true
+          remove_dotnet: true
+          remove_haskell: true
+          remove_swap: true
+          rm_cmd: "rmz"
+
+      - name: Install Binaries
+        run: ./hack/binaries.sh
+      - name: Allocate Cluster
+        run: ./hack/cluster.sh
+      - name: Start Local Registry
+        run: ./hack/registry.sh
+      - name: Prepare Images
+        run: ./hack/images.sh
+
+      - name: Run Config CI E2E Test
+        run: make test-e2e-config-ci
