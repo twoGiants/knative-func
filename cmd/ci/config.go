@@ -68,7 +68,6 @@ const (
 type CIConfig struct {
 	githubWorkflowDir,
 	githubWorkflowFilename,
-	path,
 	branch,
 	workflowName,
 	kubeconfigSecret,
@@ -83,9 +82,12 @@ type CIConfig struct {
 	testStep,
 	force,
 	verbose bool
+	fnRuntime,
+	fnRoot string
 }
 
 func NewCIConfig(
+	fnLoader common.FunctionLoader,
 	currentBranch common.CurrentBranchFunc,
 	workingDir common.WorkDirFunc,
 	workflowNameExplicit bool,
@@ -106,10 +108,14 @@ func NewCIConfig(
 
 	workflowName := resolveWorkflowName(workflowNameExplicit)
 
+	f, err := fnLoader.Load(path)
+	if err != nil {
+		return CIConfig{}, err
+	}
+
 	return CIConfig{
 		githubWorkflowDir:      DefaultGitHubWorkflowDir,
 		githubWorkflowFilename: DefaultGitHubWorkflowFilename,
-		path:                   path,
 		branch:                 branch,
 		workflowName:           workflowName,
 		kubeconfigSecret:       viper.GetString(KubeconfigSecretNameFlag),
@@ -124,13 +130,18 @@ func NewCIConfig(
 		testStep:               viper.GetBool(TestStepFlag),
 		force:                  viper.GetBool(ForceFlag),
 		verbose:                viper.GetBool(VerboseFlag),
+		fnRuntime:              f.Runtime,
+		fnRoot:                 f.Root,
 	}, nil
 }
 
 func resolvePlatform() error {
 	platform := viper.GetString(PlatformFlag)
+	if platform == "" {
+		return fmt.Errorf("platform must not be empty, supported: %s", DefaultPlatform)
+	}
 	if strings.ToLower(platform) != DefaultPlatform {
-		return fmt.Errorf("%s support is not implemented", platform)
+		return fmt.Errorf("%s support is not implemented, supported: %s", platform, DefaultPlatform)
 	}
 
 	return nil
@@ -177,20 +188,13 @@ func resolveWorkflowName(explicit bool) string {
 	return DefaultWorkflowName
 }
 
-func (cc CIConfig) fnGitHubWorkflowDir(fnRoot string) string {
-	return filepath.Join(fnRoot, cc.githubWorkflowDir)
-}
-
-func (cc CIConfig) FnGitHubWorkflowFilepath(fnRoot string) string {
-	return filepath.Join(cc.fnGitHubWorkflowDir(fnRoot), cc.githubWorkflowFilename)
+func (cc CIConfig) FnGitHubWorkflowFilepath() string {
+	fnGitHubWorkflowDir := filepath.Join(cc.fnRoot, cc.githubWorkflowDir)
+	return filepath.Join(fnGitHubWorkflowDir, cc.githubWorkflowFilename)
 }
 
 func (cc CIConfig) OutputPath() string {
 	return filepath.Join(cc.githubWorkflowDir, cc.githubWorkflowFilename)
-}
-
-func (cc CIConfig) Path() string {
-	return cc.path
 }
 
 func (cc CIConfig) Branch() string {
@@ -247,4 +251,8 @@ func (cc CIConfig) Force() bool {
 
 func (cc CIConfig) Verbose() bool {
 	return cc.verbose
+}
+
+func (cc CIConfig) FnRuntime() string {
+	return cc.fnRuntime
 }

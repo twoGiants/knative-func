@@ -36,19 +36,24 @@ type job struct {
 
 type step struct {
 	Name string            `yaml:"name,omitempty"`
+	Env  map[string]string `yaml:"env,omitempty"`
 	Uses string            `yaml:"uses,omitempty"`
 	Run  string            `yaml:"run,omitempty"`
 	With map[string]string `yaml:"with,omitempty"`
 }
 
-func NewGitHubWorkflow(conf CIConfig, runtime string, messageWriter io.Writer) *githubWorkflow {
+func NewGitHubWorkflow(conf CIConfig, messageWriter io.Writer) (*githubWorkflow, error) {
 	var steps []step
 	steps = createCheckoutStep(steps)
-	steps = createRuntimeTestStep(conf, steps, runtime, messageWriter)
+	steps = createRuntimeTestStep(conf, messageWriter, steps)
 	steps = createK8ContextStep(conf, steps)
 	steps = createRegistryLoginStep(conf, steps)
 	steps = createFuncCLIInstallStep(steps)
-	steps = createFuncDeployStep(conf, steps)
+
+	steps, err := createFuncDeployStep(conf, steps)
+	if err != nil {
+		return nil, err
+	}
 
 	return &githubWorkflow{
 		Name: conf.WorkflowName(),
@@ -59,7 +64,7 @@ func NewGitHubWorkflow(conf CIConfig, runtime string, messageWriter io.Writer) *
 				Steps:  steps,
 			},
 		},
-	}
+	}, nil
 }
 
 func createCheckoutStep(steps []step) []step {
@@ -69,14 +74,14 @@ func createCheckoutStep(steps []step) []step {
 	return append(steps, *checkoutCode)
 }
 
-func createRuntimeTestStep(conf CIConfig, steps []step, runtime string, messageWriter io.Writer) []step {
+func createRuntimeTestStep(conf CIConfig, messageWriter io.Writer, steps []step) []step {
 	if !conf.TestStep() {
 		return steps
 	}
 
 	testStep := newStep("Run tests")
 
-	switch runtime {
+	switch conf.FnRuntime() {
 	case "go":
 		testStep.withRun("go test ./...")
 	case "node", "typescript":
@@ -87,7 +92,7 @@ func createRuntimeTestStep(conf CIConfig, steps []step, runtime string, messageW
 		testStep.withRun("./mvnw test")
 	default:
 		// best-effort user message; errors are non-critical
-		_, _ = fmt.Fprintf(messageWriter, "WARNING: test step not supported for runtime %s\n", runtime)
+		_, _ = fmt.Fprintf(messageWriter, "WARNING: test step not supported for runtime %s\n", conf.FnRuntime())
 		return steps
 	}
 
@@ -126,20 +131,50 @@ func createFuncCLIInstallStep(steps []step) []step {
 	return append(steps, *installFuncCli)
 }
 
-func createFuncDeployStep(conf CIConfig, steps []step) []step {
-	runFuncDeploy := "func deploy"
+func createFuncDeployStep(conf CIConfig, steps []step) ([]step, error) {
+	deployFuncStep := newStep("Deploy function").
+		withEnv("FUNC_VERBOSE", "true")
+
+	builder, err := builderForRuntime(conf.FnRuntime(), conf.RemoteBuild())
+	if err != nil {
+		return nil, err
+	}
+	deployFuncStep.withEnv("FUNC_BUILDER", builder)
+
 	if conf.RemoteBuild() {
-		runFuncDeploy += " --remote"
+		deployFuncStep.withEnv("FUNC_REMOTE", "true")
 	}
 
 	registryUrl := newVariable(conf.RegistryUrlVar())
 	if conf.RegistryLogin() {
 		registryUrl = newVariable(conf.RegistryLoginUrlVar()) + "/" + newVariable(conf.RegistryUserVar())
 	}
-	deployFunc := newStep("Deploy function").
-		withRun(runFuncDeploy + " --registry=" + registryUrl + " -v")
+	deployFuncStep.withEnv("FUNC_REGISTRY", registryUrl).
+		withRun("func deploy")
 
-	return append(steps, *deployFunc)
+	return append(steps, *deployFuncStep), nil
+}
+
+func builderForRuntime(runtime string, remote bool) (string, error) {
+	switch runtime {
+	case "go":
+		if remote {
+			return "pack", nil
+		}
+		return "host", nil
+
+	case "node", "typescript", "rust", "quarkus", "springboot":
+		return "pack", nil
+
+	case "python":
+		if remote {
+			return "s2i", nil
+		}
+		return "host", nil
+
+	default:
+		return "", fmt.Errorf("no builder support for runtime: %s", runtime)
+	}
 }
 
 func createPushTrigger(conf CIConfig) workflowTriggers {
@@ -174,6 +209,16 @@ func (s *step) withActionConfig(key, value string) *step {
 	}
 
 	s.With[key] = value
+
+	return s
+}
+
+func (s *step) withEnv(key, value string) *step {
+	if s.Env == nil {
+		s.Env = make(map[string]string)
+	}
+
+	s.Env[key] = value
 
 	return s
 }

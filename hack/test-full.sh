@@ -65,6 +65,8 @@ main() {
     test-e2e
     test-e2e-podman
     test-e2e-runtimes
+
+    completed
 }
 
 # -----
@@ -251,7 +253,22 @@ test-e2e-runtimes() {
     echo "${blue}E2E - Runtimes${reset}"
     make test-e2e-matrix
     echo "${green}✓ E2E Runtime tests passed${reset}"
+}
 
+# -------------------
+# E2E CONFIG CI TESTS
+# -------------------
+# Mimics "test-e2e-config-ci" Workflow Job
+# which sets:
+#   FUNC_E2E_CONFIG_CI
+test-e2e-config-ci() {
+    echo ""
+    echo "${blue}E2E - Config CI${reset}"
+    make test-e2e-config-ci
+    echo "${green}✓ E2E Config CI tests passed${reset}"
+}
+
+completed() {
     echo ""
     echo "${green}✅ Full test completed successfully${reset}"
 }
