@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/ory/viper"
+	"knative.dev/func/pkg/ci/github"
 	"knative.dev/func/pkg/keda"
 
 	"knative.dev/func/cmd/prompt"
@@ -78,6 +79,7 @@ func NewClient(cfg ClientConfig, options ...fn.Option) (*fn.Client, func()) {
 				docker.WithCredentialsProvider(c),
 				docker.WithTransport(t),
 				docker.WithVerbose(cfg.Verbose))),
+			fn.WithCI(github.NewWorkflowGenerator(cfg.Verbose)),
 		}
 	)
 

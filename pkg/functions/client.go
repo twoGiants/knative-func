@@ -43,7 +43,7 @@ var (
 	// use of this set is left up to the discretion of the builders
 	// themselves.  In the event the builder receives build options which
 	// specify a set of platforms to use in leau of the default (see the
-	// BuildWithPlatforms functionl option), the builder should return
+	// BuildWithPlatforms function option), the builder should return
 	// an error if the request can not proceed.
 	DefaultPlatforms = []Platform{
 		{OS: "linux", Architecture: "amd64"},
@@ -82,6 +82,9 @@ type Client struct {
 	pipelinesProvider PipelinesProvider // CI/CD pipelines management
 	mcpServer         MCPServer         // MCP Server
 	startTimeout      time.Duration     // default start timeout for all runs
+	ci                CI
+	stdout            io.Writer
+	pathWriter        PathWriter
 }
 
 // Scaffolder wraps a function with a service scaffolding (entrypoint)
@@ -221,6 +224,16 @@ type MCPServer interface {
 	Start(context.Context, bool) error
 }
 
+type CI interface {
+	Generate(context.Context, any, PathWriter, io.Writer) error
+}
+
+// PathWriter defines the interface for writing files to a given path.
+type PathWriter interface {
+	Exist(path string) bool
+	Write(path string, raw []byte) error
+}
+
 // New client for function management.
 func New(options ...Option) *Client {
 	// Instantiate client with static defaults.
@@ -237,6 +250,7 @@ func New(options ...Option) *Client {
 		mcpServer:         &noopMCPServer{},
 		transport:         http.DefaultTransport,
 		startTimeout:      DefaultStartTimeout,
+		ci:                &noopCI{},
 	}
 	c.runner = newDefaultRunner(c, os.Stdout, os.Stderr)
 	for _, o := range options {
@@ -336,7 +350,7 @@ func WithDescribers(describers ...Describer) Option {
 	}
 }
 
-// WithDNSProvider proivdes a DNS provider implementation for registering the
+// WithDNSProvider provides a DNS provider implementation for registering the
 // effective DNS name which is either explicitly set via WithName or is derived
 // from the root path.
 func WithDNSProvider(provider DNSProvider) Option {
@@ -355,7 +369,7 @@ func WithRepositoriesPath(path string) Option {
 }
 
 // WithRepository sets a specific URL to a Git repository from which to pull
-// templates.  This setting's existence precldes the use of either the inbuilt
+// templates.  This setting's existence precedes the use of either the inbuilt
 // templates or any repositories from the extensible repositories path.
 func WithRepository(uri string) Option {
 	return func(c *Client) {
@@ -425,6 +439,24 @@ func WithMCPServer(s MCPServer) Option {
 func WithStartTimeout(t time.Duration) Option {
 	return func(c *Client) {
 		c.startTimeout = t
+	}
+}
+
+func WithCI(ci CI) Option {
+	return func(c *Client) {
+		c.ci = ci
+	}
+}
+
+func WithPathWriter(pw PathWriter) Option {
+	return func(c *Client) {
+		c.pathWriter = pw
+	}
+}
+
+func WithStdout(out io.Writer) Option {
+	return func(c *Client) {
+		c.stdout = out
 	}
 }
 
@@ -566,7 +598,6 @@ func (c *Client) New(ctx context.Context, cfg Function) (string, Function, error
 
 	// Push the produced function image
 	fmt.Fprintf(os.Stderr, "Pushing container image to registry\n")
-
 	if f, _, err = c.Push(ctx, f); err != nil {
 		return route, f, err
 	}
@@ -952,7 +983,7 @@ func (c *Client) RemovePAC(ctx context.Context, f Function, metadata any) error 
 // Note that local instances of the Function created by the .Run
 // method are not considered here.  This method is intended to specifically
 // apply to the logical group of function instances actually available as
-// network sevices; this excludes local testing instances.
+// network services; this excludes local testing instances.
 //
 // For access to these local test function instances routes, use the instances
 // manager directly ( see .Instances().Get() ).
@@ -962,7 +993,7 @@ func (c *Client) Route(ctx context.Context, f Function) (string, Function, error
 	// NOTE:
 	// DNS and TLS are provisioned by Knative Serving + cert-manager,
 	// but DNS subdomain CNAME to the Kourier Load Balancer is
-	// still manual, and the initial cluster config to suppot the TLD
+	// still manual, and the initial cluster config to support the TLD
 	// is still manual.
 	if err := c.dnsProvider.Provide(f); err != nil {
 		return "", f, err
@@ -1048,7 +1079,7 @@ func (c *Client) Describe(ctx context.Context, name, namespace string, f Functio
 		return c.describeByMatchingDescriber(ctx, name, namespace)
 	}
 
-	// Desribe Current Function
+	// Describe Current Function
 	// ------------------------
 	if !f.Initialized() {
 		return d, NewErrNotInitialized(f.Root)
@@ -1110,7 +1141,7 @@ func (c *Client) List(ctx context.Context, namespace string) ([]ListItem, error)
 // function defined at root is used if it exists. If calling this directly
 // namespace must be provided in .Deploy.Namespace field except when using mocks
 // in which case empty namespace is accepted because its existence is checked
-// in the sub functions remover.Remove and pipilines.Remove
+// in the sub functions remover.Remove and pipelines.Remove
 func (c *Client) Remove(ctx context.Context, name, namespace string, f Function, all bool) error {
 	// Default to name/namespace, fallback to passed Function
 	if name == "" {
@@ -1238,9 +1269,13 @@ func (c *Client) Push(ctx context.Context, f Function) (Function, bool, error) {
 }
 
 // StartMCPServer is currently a passthrough to the configured MCP Server
-// intance.
+// instance.
 func (c *Client) StartMCPServer(ctx context.Context, writeEnabled bool) error {
 	return c.mcpServer.Start(ctx, writeEnabled)
+}
+
+func (c *Client) GenerateCIWorkflow(ctx context.Context, config any) error {
+	return c.ci.Generate(ctx, config, c.pathWriter, c.stdout)
 }
 
 // ensureRunDataDir creates a .func directory at the given path, and
@@ -1529,3 +1564,7 @@ func (n *noopDNSProvider) Provide(_ Function) error { return nil }
 type noopMCPServer struct{}
 
 func (n *noopMCPServer) Start(_ context.Context, _ bool) error { return nil }
+
+type noopCI struct{}
+
+func (n *noopCI) Generate(_ context.Context, _ any, _ PathWriter, _ io.Writer) error { return nil }
